@@ -1,54 +1,32 @@
 #include <Arduino.h>
-//#include "LM335.h"
 #include "Moonlite.h"
 #include "StepperControl.h"
-#include <ESP32Encoder.h>
 
-//#include <U8x8lib.h>
-//#include <U8g2lib.h>
+#define LED_PIN   PA0
 
-const int directionPin = 32;
-const int stepPin      = 33;
-const int sleepPin     = 25;
-const int resetPin     = 26;
-const int stepMode3    = 27;
-const int stepMode2    = 14;
-const int stepMode1    = 12;
-const int enablePin    = 13;
-
-const int encoderPin1  = 2;
-const int encoderPin2  = 15;
-
-#define RXD2 16
-#define TXD2 17
-
-const int encoderMotorstepsRelation = 5;
+// Stepper control constants
+#define DIRECTION PA1
+#define STEP      PA2
+#define SLEEP     PA3
+#define RESET     PA4
+#define STEP_M3   PA5
+#define STEP_M2   PA6
+#define STEP_M1   PA7
+#define ENABLE    PB0
 
 //const int temperatureSensorPin = 3;
 
 unsigned long timestamp;
-unsigned long displayTimestamp;
 
 //LM335 TemperatureSensor(temperatureSensorPin);
-StepperControl Motor(stepPin,
-                           directionPin,
-                           stepMode1,
-                           stepMode2,
-                           stepMode3,
-                           enablePin,
-                           sleepPin,
-                           resetPin);
+StepperControl Motor(STEP, DIRECTION,
+                     STEP_M1, STEP_M2, STEP_M3,
+                     ENABLE, SLEEP, RESET);
 Moonlite SerialProtocol;
-ESP32Encoder encoder;
-
-// Declaration of the display
-//U8G2_SSD1306_128X64_NONAME_1_HW_I2C Display(U8G2_R0);
 
 float temp = 0;
 long pos = 0;
 bool pageIsRefreshing = false;
-
-hw_timer_t * timer = NULL;
 
 void processCommand()
 {
@@ -165,12 +143,10 @@ void processCommand()
       break;
     case ML_SN:
       // Set the target position
-      encoder.setCount(SerialProtocol.getCommand().parameter * encoderMotorstepsRelation);
       Motor.setTargetPosition(SerialProtocol.getCommand().parameter);
       break;
     case ML_SP:
       // Set the current motor position
-      encoder.setCount(SerialProtocol.getCommand().parameter * encoderMotorstepsRelation);
       Motor.setCurrentPosition(SerialProtocol.getCommand().parameter);
       break;
     case ML_PLUS:
@@ -190,26 +166,11 @@ void processCommand()
   }
 }
 
-void SetupEncoder()
-{
-  delay(1);
-  // Enable the weak pull down resistors
-//	ESP32Encoder::useInternalWeakPullResistors=0;
-  // set starting count value
-	encoder.clearCount();
-  // Attach pins for use as encoder pins
-	encoder.attachSingleEdge(encoderPin1, encoderPin2);
-}
-
 void setup()
 {
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(PC13, HIGH);
   SerialProtocol.init(9600);
-  // Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
-  // Serial2.println("Begin debugging");
-
-  //Display.begin();
-  //Display.setContrast(0);
-  //Display.setFont(u8g2_font_crox4hb_tr);
 
   // Set the motor speed to a valid value for Moonlite
   Motor.setSpeed(7000);
@@ -217,34 +178,13 @@ void setup()
   Motor.setMoveMode(SC_MOVEMODE_SMOOTH);
 
   timestamp = millis();
-  //displayTimestamp = millis();
-
-  SetupEncoder();
-}
-
-void HandleHandController()
-{
-  long targetPosition = Motor.getTargetPosition();
-  long encoderPosition = encoder.getCount() / encoderMotorstepsRelation;
-  Motor.setTargetPosition(encoderPosition);  
-  if(targetPosition != encoderPosition)
-  {
-    Motor.goToTargetPosition();
-  }
-  if (!Motor.isInMove())
-  {
-    Motor.goToTargetPosition();
-  }
-  while(Motor.isInMove())
-  {
-    Motor.Manage();
-  }
 }
 
 void loop()
 {
   if (!Motor.isInMove())
   {
+    digitalWrite(LED_PIN, HIGH);
     //TemperatureSensor.Manage();
     if (Motor.isTemperatureCompensationEnabled() && ((millis() - timestamp) > 30000))
     {
@@ -253,10 +193,9 @@ void loop()
       Motor.compensateTemperature();
       timestamp = millis();
     }
+  } else {
+    digitalWrite(LED_PIN, LOW);
   }
-
-
-  HandleHandController();
 
   Motor.Manage();
   SerialProtocol.Manage();
@@ -265,19 +204,4 @@ void loop()
   {
     processCommand();
   }
-
-
-
-//  if ((millis() - displayTimestamp) >= 1000 && !Motor.isInMove())
-//  {
-//    Display.firstPage();
-//    temp = TemperatureSensor.getTemperature();
-//    pos = Motor.getCurrentPosition();
-//    do
-//    {
-//      Display.drawStr(0, 16, ((String("T: ") + String(temp, 1) + " C").c_str()));
-//      Display.drawStr(0, 55, (String("Pos: ") + pos).c_str());
-//    } while (Display.nextPage());
-//    displayTimestamp = millis();
-//  }
 }
